@@ -1,0 +1,25 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isAdmin() {
+      return request.auth != null
+        && (request.auth.uid == 'ECiZzHnenFgxDMQicR0bgFZRPw03'
+          || request.auth.uid == 'XzWws8PJhSde6NTPRI9y1iutHuZ2');
+    }
+
+    match /{folder}/{fileName} {
+      allow read: if folder in ['articles', 'galleries', 'authors', 'ads'];
+      allow create, update: if isAdmin()
+        && folder in ['articles', 'galleries', 'authors', 'ads']
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if isAdmin()
+        && folder in ['articles', 'galleries', 'authors', 'ads'];
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
