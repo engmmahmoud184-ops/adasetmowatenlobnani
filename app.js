@@ -12,6 +12,8 @@ const demoArticles = [
 
 let articles = [];
 let tickerTimer;
+let firestoreDb;
+let firestoreApi;
 const $ = selector => document.querySelector(selector);
 const formatDate = value => new Intl.DateTimeFormat("ar-LB",{day:"numeric",month:"long",year:"numeric"}).format(new Date(value));
 const safe = value => String(value ?? "").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
@@ -19,17 +21,16 @@ const videoSource=value=>{const raw=String(value||"").trim();if(!raw)return null
 
 async function loadArticles(){
   if(!isFirebaseConfigured){articles=demoArticles;renderAll();return;}
-  let db;
   try{
     const {initializeApp}=await import("https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js");
-    const {getFirestore,collection,getDocs,query,where}=await import("https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js");
-    db=getFirestore(initializeApp(firebaseConfig));
-    const snap=await getDocs(query(collection(db,"articles"),where("status","==","published")));
+    firestoreApi=await import("https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js");
+    firestoreDb=firestoreApi.getFirestore(initializeApp(firebaseConfig));
+    const snap=await firestoreApi.getDocs(firestoreApi.query(firestoreApi.collection(firestoreDb,"articles"),firestoreApi.where("status","==","published")));
     articles=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
     if(!articles.length) articles=demoArticles;
   }catch(error){console.warn("تعذّر الاتصال بـ Firebase، تم تشغيل الوضع التجريبي.",error);articles=demoArticles;}
   renderAll();
-  if(db) loadHeaderAd(db);
+  if(firestoreDb) loadHeaderAd(firestoreDb);
 }
 
 async function loadHeaderAd(db){try{const {doc,getDoc}=await import("https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js");const snap=await getDoc(doc(db,"ads","header"));if(!snap.exists())return;const ad=snap.data();if(!ad.active||!ad.image)return;const host=$("#headerAd");const link=document.createElement("a");link.href=ad.link||"#";link.target="_blank";link.rel="noopener noreferrer sponsored";link.setAttribute("aria-label",ad.name?`إعلان ${ad.name}`:"إعلان");const img=document.createElement("img");img.src=ad.image;img.alt=ad.name||"إعلان";link.append(img);host.replaceChildren(link);host.classList.add("has-ad")}catch(error){console.warn("تعذّر تحميل الإعلان.",error)}}
@@ -46,14 +47,15 @@ function renderTicker(){
   mobileItems[0]?.classList.add("active");
   if(mobileItems.length>1){let index=0;tickerTimer=setInterval(()=>{mobileItems[index].classList.remove("active");index=(index+1)%mobileItems.length;mobileItems[index].classList.add("active")},4500)}
 }
-function renderHero(){const featured=articles.filter(a=>a.featured).slice(0,3);const picks=featured.length>=3?featured:articles.slice(0,3);$("#heroGrid").innerHTML=picks.map((a,i)=>`<article class="hero-story" data-id="${a.id}" tabindex="0"><img src="${safe(a.image||fallbackImage)}" alt=""><div class="hero-copy"><span class="category">${safe(a.category)}</span><${i===0?"h1":"h2"}>${safe(a.title)}</${i===0?"h1":"h2"}><div class="meta">${formatDate(a.date)} · ${safe(a.author)}</div></div></article>`).join("");bindCards();}
+function renderHero(){const featured=articles.filter(a=>a.featured).slice(0,3);const picks=featured.length>=3?featured:articles.slice(0,3);$("#heroGrid").innerHTML=picks.map((a,i)=>`<article class="hero-story" data-id="${a.id}" tabindex="0"><img src="${safe(a.image||fallbackImage)}" alt=""><div class="hero-copy"><span class="category">${safe(a.category)}</span><${i===0?"h1":"h2"}>${safe(a.title)}</${i===0?"h1":"h2"}><div class="meta"><span>${formatDate(a.date)} · ${safe(a.author)}</span><span class="view-count">◉ ${Number(a.views||0).toLocaleString("ar-LB")} مشاهدة</span></div></div></article>`).join("");bindCards();}
 function card(a){return `<article class="news-card" data-id="${a.id}" tabindex="0"><div class="news-image"><img src="${safe(a.image||fallbackImage)}" alt=""><span class="category">${safe(a.category)}</span>${videoSource(a.videoUrl)?'<span class="play-badge">▶</span>':""}${a.gallery?.length?`<span class="gallery-badge">▣ ${a.gallery.length} صور</span>`:""}</div><div class="news-body"><h3>${safe(a.title)}</h3><p>${safe(a.excerpt)}</p><div class="card-meta"><span>${formatDate(a.date)}</span><span>◉ ${Number(a.views||0).toLocaleString("ar-LB")}</span></div></div></article>`;}
 function renderNews(list){$("#newsGrid").innerHTML=list.map(card).join("");$("#emptyState").hidden=!!list.length;bindCards();}
 function renderMostRead(){const sorted=[...articles].sort((a,b)=>(b.views||0)-(a.views||0)).slice(0,5);$("#mostReadList").innerHTML=sorted.map((a,i)=>`<article class="read-item" data-id="${a.id}" tabindex="0"><span class="read-number">${i+1}</span><div><h4>${safe(a.title)}</h4><span>${Number(a.views||0).toLocaleString("ar-LB")} قراءة</span></div></article>`).join("");bindCards();}
-function renderVideos(){const section=$("#videos");const videos=articles.filter(a=>videoSource(a.videoUrl));section.hidden=!videos.length;if(!videos.length){$("#videoGrid").innerHTML="";return}$("#videoGrid").innerHTML=videos.slice(0,3).map(a=>`<article class="video-card" data-id="${a.id}" tabindex="0"><img src="${safe(a.image||fallbackImage)}" alt=""><span class="play">▶</span><h3>${safe(a.title)}</h3></article>`).join("");bindCards();}
+function renderVideos(){const section=$("#videos");const videos=articles.filter(a=>videoSource(a.videoUrl));section.hidden=!videos.length;if(!videos.length){$("#videoGrid").innerHTML="";return}$("#videoGrid").innerHTML=videos.slice(0,6).map(a=>{const source=videoSource(a.videoUrl);return `<article class="video-card" data-id="${a.id}" tabindex="0"><img src="${safe(a.image||fallbackImage)}" alt=""><span class="play">▶</span><span class="video-provider">${safe(source.provider)}</span><div class="video-copy"><h3>${safe(a.title)}</h3><span class="video-views">◉ ${Number(a.views||0).toLocaleString("ar-LB")} مشاهدة</span></div></article>`}).join("");bindCards();}
 function renderAuthors(){const unique=[...new Map(articles.map(a=>[a.author,{name:a.author,role:a.authorRole||"كاتب في عدسة مواطن لبناني",image:a.authorImage||fallbackImage}])).values()].slice(0,4);$("#authorsGrid").innerHTML=unique.map(a=>`<article class="author-card"><img src="${safe(a.image)}" alt="${safe(a.name)}"><h3>${safe(a.name)}</h3><p>${safe(a.role)}</p></article>`).join("");}
 function bindCards(){document.querySelectorAll("[data-id]").forEach(el=>{el.onclick=()=>openArticle(el.dataset.id);el.onkeydown=e=>{if(e.key==="Enter")openArticle(el.dataset.id)}});}
-function openArticle(id){const a=articles.find(x=>String(x.id)===String(id));if(!a)return;const gallery=(a.gallery||[]).map(src=>`<img src="${safe(src)}" alt="صورة من الخبر">`).join("");const video=videoSource(a.videoUrl);const videoHtml=video?.embed?`<iframe class="article-video${video.vertical?" vertical":""}" src="${safe(video.embed)}" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen title="فيديو الخبر من ${safe(video.provider)}"></iframe>`:video?.external?`<a class="article-video-link" href="${safe(video.external)}" target="_blank" rel="noopener noreferrer">شاهد الفيديو على ${safe(video.provider)}</a>`:"";$("#articleContent").innerHTML=`<img class="article-cover" src="${safe(a.image||fallbackImage)}" alt=""><div class="article-inner"><span class="category">${safe(a.category)}</span><h1>${safe(a.title)}</h1><p class="article-meta">بقلم ${safe(a.author)} · ${formatDate(a.date)} · ${Number(a.views||0).toLocaleString("ar-LB")} قراءة</p><div class="body">${safe(a.body||a.excerpt)}</div>${videoHtml}${gallery?`<div class="article-gallery">${gallery}</div>`:""}</div>`;$("#articleDialog").showModal();}
+async function trackView(article){const key=`viewed_${article.id}`;if(!firestoreDb||!firestoreApi||sessionStorage.getItem(key))return;sessionStorage.setItem(key,"1");article.views=Number(article.views||0)+1;try{await firestoreApi.updateDoc(firestoreApi.doc(firestoreDb,"articles",String(article.id)),{views:firestoreApi.increment(1)})}catch(error){article.views=Math.max(0,article.views-1);sessionStorage.removeItem(key);console.warn("تعذّر تسجيل المشاهدة.",error)}}
+function openArticle(id){const a=articles.find(x=>String(x.id)===String(id));if(!a)return;trackView(a);const gallery=(a.gallery||[]).map(src=>`<img src="${safe(src)}" alt="صورة من الخبر">`).join("");const video=videoSource(a.videoUrl);const videoHtml=video?.embed?`<div class="article-video-wrap"><span>${safe(video.provider)}</span><iframe class="article-video${video.vertical?" vertical":""}" src="${safe(video.embed)}" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen title="فيديو الخبر من ${safe(video.provider)}"></iframe></div>`:video?.external?`<a class="article-video-link" href="${safe(video.external)}" target="_blank" rel="noopener noreferrer">شاهد الفيديو على ${safe(video.provider)}</a>`:"";$("#articleContent").innerHTML=`<img class="article-cover" src="${safe(a.image||fallbackImage)}" alt=""><div class="article-inner"><span class="category">${safe(a.category)}</span><h1>${safe(a.title)}</h1><p class="article-meta">بقلم ${safe(a.author)} · ${formatDate(a.date)} · <strong>◉ ${Number(a.views||0).toLocaleString("ar-LB")} مشاهدة</strong></p>${videoHtml}<div class="body">${safe(a.body||a.excerpt)}</div>${gallery?`<div class="article-gallery">${gallery}</div>`:""}</div>`;$("#articleDialog").showModal();}
 
 document.querySelectorAll("[data-category]").forEach(link=>link.addEventListener("click",()=>{$("#newsTitle").textContent=`أخبار ${link.dataset.category}`;renderNews(articles.filter(a=>a.category===link.dataset.category));document.querySelectorAll(".nav-inner a").forEach(x=>x.classList.remove("active"));link.classList.add("active");}));
 $("#showAll").onclick=()=>{$("#newsTitle").textContent="أحدث الأخبار";renderNews(articles)};

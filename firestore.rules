@@ -9,7 +9,11 @@ service cloud.firestore {
 
     match /articles/{articleId} {
       allow read: if resource.data.status == 'published' || isAdmin();
-      allow create, update, delete: if isAdmin();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin()
+        || (resource.data.status == 'published'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views'])
+          && request.resource.data.views == resource.data.views + 1);
     }
 
     match /ads/{adId} {
