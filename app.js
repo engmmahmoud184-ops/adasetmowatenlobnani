@@ -14,6 +14,7 @@ let articles = [];
 let tickerTimer;
 let firestoreDb;
 let firestoreApi;
+const adPlacements={header:"headerAd",afterHero:"afterHeroAd",inline:"inlineAd",sidebar:"sidebarAd"};
 const $ = selector => document.querySelector(selector);
 const formatDate = value => new Intl.DateTimeFormat("ar-LB",{day:"numeric",month:"long",year:"numeric"}).format(new Date(value));
 const safe = value => String(value ?? "").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
@@ -30,10 +31,11 @@ async function loadArticles(){
     if(!articles.length) articles=demoArticles;
   }catch(error){console.warn("تعذّر الاتصال بـ Firebase، تم تشغيل الوضع التجريبي.",error);articles=demoArticles;}
   renderAll();
-  if(firestoreDb) loadHeaderAd(firestoreDb);
+  if(firestoreDb) loadAds(firestoreDb);
 }
 
-async function loadHeaderAd(db){try{const {doc,getDoc}=await import("https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js");const snap=await getDoc(doc(db,"ads","header"));if(!snap.exists())return;const ad=snap.data();if(!ad.active||!ad.image)return;const host=$("#headerAd");const link=document.createElement("a");link.href=ad.link||"#";link.target="_blank";link.rel="noopener noreferrer sponsored";link.setAttribute("aria-label",ad.name?`إعلان ${ad.name}`:"إعلان");const img=document.createElement("img");img.src=ad.image;img.alt=ad.name||"إعلان";link.append(img);host.replaceChildren(link);host.classList.add("has-ad")}catch(error){console.warn("تعذّر تحميل الإعلان.",error)}}
+async function loadAds(db){try{const {doc,getDoc}=await import("https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js");await Promise.all(Object.entries(adPlacements).map(async([placement,elementId])=>{const snap=await getDoc(doc(db,"ads",placement));if(!snap.exists())return;renderAd(document.getElementById(elementId),snap.data())}))}catch(error){console.warn("تعذّر تحميل الإعلانات.",error)}}
+function renderAd(host,ad){if(!host||!ad?.active||!ad.image)return;const img=document.createElement("img");img.src=ad.image;img.alt=ad.alt||ad.name||"إعلان";img.loading=host.id==="headerAd"?"eager":"lazy";if(ad.link){const link=document.createElement("a");link.href=ad.link;link.target="_blank";link.rel="noopener noreferrer sponsored";link.setAttribute("aria-label",ad.name?`إعلان ${ad.name}`:"إعلان");link.append(img);host.replaceChildren(link)}else host.replaceChildren(img);host.classList.add("has-ad")}
 
 function renderAll(){renderTicker();renderHero();renderNews(articles);renderMostRead();renderVideos();renderAuthors();const articleId=decodeURIComponent(location.hash.replace(/^#article=/,""));if(location.hash.startsWith("#article=")&&articleId)openArticle(articleId,false);}
 function renderTicker(){
